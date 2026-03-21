@@ -6,7 +6,7 @@ import com.microsoft.playwright.Playwright
 import org.slf4j.LoggerFactory
 
 object PlaywrightManager {
-    private val logger = LoggerFactory.getLogger(javaClass)
+    private val logger = LoggerFactory.getLogger(PlaywrightManager::class.java)
     private var playwright: Playwright? = null
     var browser: Browser? = null
         private set

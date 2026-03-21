@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory
 import scraper.ScraperConfig
 
 object SemesterReportParser {
-    private val logger = LoggerFactory.getLogger(javaClass)
+    private val logger = LoggerFactory.getLogger(SemesterReportParser::class.java)
 
     fun parse(page: Page): SemesterReport {
 

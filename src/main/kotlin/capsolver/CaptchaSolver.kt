@@ -27,8 +27,7 @@ class CaptchaSolver(
             logger.info("Task created (ID: {}). Waiting {}ms...", taskId, config.initialDelayMs)
             delay(config.initialDelayMs)
 
-            return pollForSolution(taskId)
-                ?: throw CaptchaException("Captcha solving timed out or failed.")
+            return pollForSolution(taskId) ?: throw CaptchaException("Captcha solving timed out or failed.")
 
         } catch (e: Exception) {
             logger.error("Unexpected error during Captcha solving process", e)
