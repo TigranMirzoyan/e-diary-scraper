@@ -13,7 +13,6 @@ object SemesterReportParser {
     private val logger = LoggerFactory.getLogger(SemesterReportParser::class.java)
 
     fun parse(page: Page): SemesterReport {
-
         try {
             page.waitForSelector(
                 ".table-responsive",
@@ -49,9 +48,7 @@ object SemesterReportParser {
         if (tableLocator == null) return emptyList()
 
         val rows = tableLocator.locator("tbody tr").all()
-
         return rows.mapNotNull { row ->
-
             val cells = row.locator("td").all()
 
             if (cells.isEmpty() || cells[0].innerText().isBlank()) {

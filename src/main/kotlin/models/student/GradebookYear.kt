@@ -11,18 +11,17 @@ data class GradebookYear(
 @Serializable
 data class SemesterData(
     val semester: Int,
-    val subjects: List<SubjectGrades>
+    val subjects: List<SubjectScores>
 )
 
 @Serializable
-data class SubjectGrades(
+data class SubjectScores(
     val subject: String,
-    val records: List<GradeRecord>
+    val records: List<ScoreRecord>
 )
 @Serializable
-data class GradeRecord(
+data class ScoreRecord(
     val date: String,
     val dayOfWeek: String,
-    val period: Int,
-    val grade: Int
+    val score: Int
 )

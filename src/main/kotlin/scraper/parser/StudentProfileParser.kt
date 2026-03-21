@@ -2,9 +2,9 @@ package scraper.parser
 
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.options.WaitUntilState
+import models.student.AcademicRecord
 import models.student.SemesterReport
 import models.student.StudentProfile
-import models.student.AcademicRecord
 import org.slf4j.LoggerFactory
 import scraper.ScraperConfig
 
@@ -13,7 +13,7 @@ object StudentProfileParser {
     private val fastNavOptions = Page.NavigateOptions().setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
 
     fun extractProfiles(page: Page): List<StudentProfile> {
-        val metadataList = collectStudentMetadata(page)
+        val metadataList = collectStudentsMetadata(page)
         logger.info("Found {} student(s). Extracting profiles...", metadataList.size)
 
         return metadataList.map { meta ->
@@ -21,7 +21,7 @@ object StudentProfileParser {
         }
     }
 
-    private fun collectStudentMetadata(page: Page): List<StudentMetadata> {
+    private fun collectStudentsMetadata(page: Page): List<StudentMetadata> {
         page.waitForSelector(".users-card")
         val allCards = page.locator(".user-card").all()
 
@@ -29,16 +29,16 @@ object StudentProfileParser {
 
         return validCards.map { card ->
             val h6Lines = card.locator("h6").first().innerText().trim().split("\n")
-            val semesterBtn = card.locator("a:has-text('Կիսամյակներ')")
-            val diaryBtn = card.locator("a:has-text('Օրագիր')")
+            val semesterButton = card.locator("a:has-text('Կիսամյակներ')")
+            val gradebookButton = card.locator("a:has-text('Օրագիր')")
 
             StudentMetadata(
                 name = card.locator("h4").innerText().trim(),
                 photoUrl = normalizePhotoUrl(card.locator(".card-header-img img").getAttribute("src")),
                 schoolName = h6Lines.getOrNull(0)?.trim().orEmpty(),
                 gradeName = h6Lines.getOrNull(1)?.trim().orEmpty(),
-                semesterUrl = if (semesterBtn.count() > 0) semesterBtn.first().getAttribute("href") else null,
-                diaryUrl = if (diaryBtn.count() > 0) diaryBtn.first().getAttribute("href") else null
+                semesterUrl = if (semesterButton.count() > 0) semesterButton.first().getAttribute("href") else null,
+                gradebookUrl = if (gradebookButton.count() > 0) gradebookButton.first().getAttribute("href") else null
             )
         }
     }
@@ -50,21 +50,20 @@ object StudentProfileParser {
             page.navigate(url, fastNavOptions)
             SemesterReportParser.parse(page)
         } ?: SemesterReport(emptyList(), emptyList())
+        logger.info("Processed semester data")
 
-        val gradebooksData = meta.diaryUrl?.let { url ->
+        val gradebooksData = meta.gradebookUrl?.let { url ->
             page.navigate(url, fastNavOptions)
             GradebookYearParser.parse(page)
         } ?: emptyList()
+        logger.info("Processed gradebook data")
 
         return StudentProfile(
             name = meta.name,
             photoUrl = meta.photoUrl,
             schoolName = meta.schoolName,
             gradeName = meta.gradeName,
-            academicRecord = AcademicRecord(
-                gradebooks = gradebooksData,
-                semesterReport = semesterData
-            )
+            academicRecord = AcademicRecord(gradebooks = gradebooksData, semesterReport = semesterData)
         )
     }
 
@@ -81,5 +80,5 @@ private data class StudentMetadata(
     val schoolName: String,
     val gradeName: String,
     val semesterUrl: String?,
-    val diaryUrl: String?
+    val gradebookUrl: String?
 )
