@@ -1,9 +1,6 @@
 package core
 
-import service.EDiaryService
-import scraper.PlaywrightManager
 import capsolver.CaptchaSolver
-import models.student.StudentCredentials
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -14,6 +11,8 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
+import models.student.StudentCredentials
+import service.EDiaryService
 
 fun Application.configureRouting() {
     val httpClient = HttpClient(CIO) {
@@ -27,26 +26,18 @@ fun Application.configureRouting() {
     }
 
     val captchaSolver = CaptchaSolver(client = httpClient)
+    val eDiaryService = EDiaryService(captchaSolver)
 
     routing {
         get("/health") {
             application.log.info("Health check")
-            call.respond(HttpStatusCode.OK, PlaywrightManager.browser != null)
+            call.respond(HttpStatusCode.OK, mapOf("status" to "healthy"))
         }
 
         post("/api/student-data") {
             val credentials = call.receive<StudentCredentials>()
 
             application.log.info("API Request: Fetching students data for {}", credentials.email)
-
-            val browser = PlaywrightManager.browser
-            if (browser == null) {
-                application.log.error("Request failed: Browser instance is null")
-                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Browser not initialized"))
-                return@post
-            }
-
-            val eDiaryService = EDiaryService(browser, captchaSolver)
             val result = eDiaryService.fetchStudentData(credentials.email, credentials.password)
 
             result.fold(onSuccess = { profiles ->

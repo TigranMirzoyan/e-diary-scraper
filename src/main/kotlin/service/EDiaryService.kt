@@ -1,30 +1,26 @@
 package service
 
 import capsolver.CaptchaException
-import com.microsoft.playwright.Browser
-import com.microsoft.playwright.Page
-import scraper.ScraperConfig
-import scraper.parser.StudentProfileParser
 import capsolver.CaptchaSolver
-import models.student.StudentProfile
-import kotlinx.coroutines.Dispatchers
+import com.microsoft.playwright.Page
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import models.student.StudentProfile
 import org.slf4j.LoggerFactory
+import scraper.ScraperConfig
+import scraper.PlaywrightPool
+import scraper.parser.StudentProfileParser
 
-class EDiaryService(
-    private val browser: Browser, private val captchaSolver: CaptchaSolver
-) {
+class EDiaryService(private val captchaSolver: CaptchaSolver) {
     private val logger = LoggerFactory.getLogger(EDiaryService::class.java)
 
     suspend fun fetchStudentData(email: String, password: String): Result<List<StudentProfile>> =
-        withContext(Dispatchers.IO) {
+        PlaywrightPool.withBrowser { browser ->
             val browserContext = browser.newContext()
             val page = browserContext.newPage()
 
-            return@withContext try {
+            return@withBrowser try {
                 withTimeout(ScraperConfig.FETCHING_TIMEOUT_MS) {
                     val deferredToken = async {
                         captchaSolver.solveReCaptcha(ScraperConfig.SITE_KEY, ScraperConfig.AUTH_URL)
