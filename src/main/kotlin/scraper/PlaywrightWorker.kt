@@ -4,7 +4,9 @@ import com.microsoft.playwright.Browser
 import com.microsoft.playwright.BrowserType
 import com.microsoft.playwright.Playwright
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
+import org.slf4j.MDC
 import java.util.concurrent.Executors
 
 class PlaywrightWorker(val id: Int) {
@@ -20,9 +22,14 @@ class PlaywrightWorker(val id: Int) {
         )
     }
 
-    suspend fun <T> execute(block: suspend (Browser) -> T): T = withContext(dispatcher) {
-        val currentBrowser = browser ?: throw IllegalStateException("Browser not initialized on worker $id")
-        block(currentBrowser)
+    suspend fun <T> execute(block: suspend (Browser) -> T): T {
+        val currentMdc = MDC.getCopyOfContextMap() ?: emptyMap()
+        val mergedContext = currentMdc + mapOf("workerId" to id.toString())
+
+        return withContext(dispatcher + MDCContext(mergedContext)) {
+            val currentBrowser = browser ?: throw IllegalStateException("Browser not initialized on worker $id")
+            block(currentBrowser)
+        }
     }
 
     fun stop() {

@@ -20,7 +20,6 @@ dependencies {
 
     implementation(libs.bundles.logger)
 
-    implementation(libs.captcha.solver)
     implementation(libs.dotenv.kotlin)
     implementation(libs.playwright)
 

@@ -27,5 +27,6 @@ fun Application.module() {
         PlaywrightPool.closePool()
     }
 
+    configureMonitoring()
     configureRouting()
 }
