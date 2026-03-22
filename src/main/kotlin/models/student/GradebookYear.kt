@@ -11,6 +11,7 @@ data class GradebookYear(
 @Serializable
 data class SemesterData(
     val semester: Int,
+    val absences: Int = 0,
     val subjects: List<SubjectScores>
 )
 

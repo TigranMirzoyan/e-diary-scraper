@@ -12,6 +12,10 @@ import org.slf4j.LoggerFactory
 import scraper.ScraperConfig
 
 object GradebookYearParser {
+    private class SemesterContext(var totalAbsences: Int = 0)
+    private const val EMPTY_SCHEDULE_TEXT = "Դասացուցակ կազմված չէ"
+    private const val ABSENCE_MARKER = "Բ"
+    private val WHITESPACE_REGEX = Regex("\\s+")
     private val logger = LoggerFactory.getLogger(GradebookYearParser::class.java)
 
     fun parse(page: Page): List<GradebookYear> {
@@ -56,47 +60,51 @@ object GradebookYearParser {
         )
 
         val semesterNumber = semesterValue.toIntOrNull() ?: 1
-        val targetMonths = if (semesterNumber == 1) {
-            listOf("9", "10", "11", "12")
-        } else {
-            listOf("1", "2", "3", "4", "5")
+        val targetMonths = when (semesterNumber) {
+            1 -> listOf("9", "10", "11", "12")
+            else -> listOf("1", "2", "3", "4", "5")
         }
 
         val aggregatedSubjects = mutableMapOf<String, MutableList<ScoreRecord>>()
 
-        targetMonths.forEach { monthValue ->
-            val monthlySubjects = fetchAndParseMonth(page, monthValue)
+        return with(SemesterContext()) {
+            targetMonths.forEach { monthValue ->
+                val monthlySubjects = fetchAndParseMonth(page, monthValue)
 
-            monthlySubjects.forEach { subject ->
-                val existingRecords = aggregatedSubjects.getOrPut(subject.subject) { mutableListOf() }
-                existingRecords.addAll(subject.records)
+                monthlySubjects.forEach { subject ->
+                    val existingRecords = aggregatedSubjects.getOrPut(subject.subject) { mutableListOf() }
+                    existingRecords.addAll(subject.records)
+                }
             }
-        }
 
-        val finalSemesterSubjects = aggregatedSubjects.map { (subjectName, records) ->
-            SubjectScores(subject = subjectName, records = records)
-        }
+            val finalSemesterSubjects = aggregatedSubjects.map { (subjectName, records) ->
+                SubjectScores(subject = subjectName, records = records)
+            }
 
-        return SemesterData(semester = semesterNumber, subjects = finalSemesterSubjects)
+            SemesterData(
+                semester = semesterNumber,
+                absences = totalAbsences,
+                subjects = finalSemesterSubjects,
+            )
+        }
     }
 
-    private fun fetchAndParseMonth(page: Page, monthValue: String): List<SubjectScores> {
+    private fun SemesterContext.fetchAndParseMonth(page: Page, monthValue: String): List<SubjectScores> {
         val isUiReady = isMonthUiReady(page, monthValue)
         if (!isUiReady) return emptyList()
 
         val weekButtonsLocator = page.locator(".card-header a[data-week]")
-        val aggregatedScores = mutableMapOf<String, MutableList<ScoreRecord>>()
+
         val allWeeklyData = (0 until weekButtonsLocator.count()).flatMap { i ->
             fetchAndParseWeek(page, weekButtonsLocator.nth(i))
         }
 
-        allWeeklyData.forEach { week ->
-            aggregatedScores.getOrPut(week.subject) { mutableListOf() }.addAll(week.records)
-        }
-
-        return aggregatedScores.map { (subjectName, records) ->
-            SubjectScores(subjectName, records)
-        }
+        return allWeeklyData
+            .groupBy { it.subject }
+            .map { (subjectName, subjectScoresList) ->
+                val combinedRecords = subjectScoresList.flatMap { it.records }
+                SubjectScores(subjectName, combinedRecords)
+            }
     }
 
     private fun isMonthUiReady(page: Page, monthValue: String): Boolean {
@@ -109,7 +117,7 @@ object GradebookYearParser {
                 """() => {
                     const buttons = document.querySelectorAll('.card-header a[data-week]');
                     const hasData = buttons.length > 0;
-                    const isEmpty = document.body.innerText.includes('Դասացուցակ կազմված չէ');
+                    const isEmpty = document.body.innerText.includes('$EMPTY_SCHEDULE_TEXT');
                     return hasData || isEmpty;
                 }""",
                 null,
@@ -122,7 +130,7 @@ object GradebookYearParser {
         }
     }
 
-    private fun fetchAndParseWeek(page: Page, button: Locator): List<SubjectScores> {
+    private fun SemesterContext.fetchAndParseWeek(page: Page, button: Locator): List<SubjectScores> {
         val isInactive = (button.getAttribute("class") ?: "").contains("btn-outline-primary")
 
         if (isInactive) {
@@ -144,7 +152,7 @@ object GradebookYearParser {
                 if (!block) return false;
                 
                 const hasHeaders = block.querySelector('h6.sub-title') !== null;
-                const isEmpty = block.innerText.includes('Դասացուցակ կազմված չէ');
+                const isEmpty = block.innerText.includes('$EMPTY_SCHEDULE_TEXT');
                 return hasHeaders || isEmpty;
             }""", null, Page.WaitForFunctionOptions().setTimeout(ScraperConfig.TABLE_WAITING_TIMEOUT_MS)
             )
@@ -159,7 +167,7 @@ object GradebookYearParser {
         return parseSubjectTable(page)
     }
 
-    private fun parseSubjectTable(page: Page): List<SubjectScores> {
+    private fun SemesterContext.parseSubjectTable(page: Page): List<SubjectScores> {
         val subjectsMap = mutableMapOf<String, MutableList<ScoreRecord>>()
         val dayColumns = page.locator(".row.card-block div[class*='col-']").all()
 
@@ -172,7 +180,7 @@ object GradebookYearParser {
         return subjectsMap.map { (name, records) -> SubjectScores(name, records) }
     }
 
-    private fun parseDayColumn(
+    private fun SemesterContext.parseDayColumn(
         dayColumn: Locator,
         fastOptions: Locator.TextContentOptions,
         subjectsMap: MutableMap<String, MutableList<ScoreRecord>>
@@ -187,7 +195,7 @@ object GradebookYearParser {
 
         if (headerText.isBlank()) return
 
-        val headerParts = headerText.split(Regex("\\s+"), limit = 2)
+        val headerParts = headerText.split(WHITESPACE_REGEX, limit = 2)
         val dateStr = headerParts.getOrNull(0) ?: ""
         val dayOfWeekStr = headerParts.getOrNull(1) ?: ""
 
@@ -197,7 +205,7 @@ object GradebookYearParser {
         }
     }
 
-    private fun parseSubjectRow(
+    private fun SemesterContext.parseSubjectRow(
         row: Locator,
         dateStr: String,
         dayOfWeekStr: String,
@@ -210,15 +218,20 @@ object GradebookYearParser {
         try {
             val badge = aTag.locator("label.badge").first()
             val gradeText = if (badge.count() > 0) badge.textContent(fastOptions)?.trim() ?: "" else ""
-            val score = gradeText.toIntOrNull()
 
             var subjectName = aTag.textContent(fastOptions)?.trim() ?: ""
             if (gradeText.isNotEmpty()) {
                 subjectName = subjectName.removeSuffix(gradeText).trim()
             }
             subjectName = subjectName.substringBefore('\n').trim()
-
             if (subjectName.isBlank()) return
+
+            if (gradeText.equals(ABSENCE_MARKER, ignoreCase = true)) {
+                totalAbsences++
+                return
+            }
+
+            val score = gradeText.toIntOrNull()
             val recordsList = subjectsMap.getOrPut(subjectName) { mutableListOf() }
 
             if (score == null) return
